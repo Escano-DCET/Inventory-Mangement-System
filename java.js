@@ -1,172 +1,160 @@
 let inventory = JSON.parse(localStorage.getItem('inventory')) || [];
-
-const sampleProducts = [
-    { name: "Laptop", quantity: 15, price: 50000.00, dateAdded: "2023-01-01 12:30" },
-    { name: "Smartphone", quantity: 30, price: 20000.00, dateAdded: "2023-02-15 14:00" },
-    { name: "Headphones", quantity: 50, price: 1500.00, dateAdded: "2023-03-10 09:15" },
-    { name: "Smartwatch", quantity: 25, price: 7500.00, dateAdded: "2023-03-15 11:00" },
-    { name: "Tablet", quantity: 20, price: 30000.00, dateAdded: "2023-04-01 10:00" }
-];
-
-if (inventory.length === 0) {
-    inventory = sampleProducts;
-    saveToLocalStorage();
-}
-
 let editingIndex = -1;
-
+ 
 function saveToLocalStorage() {
     localStorage.setItem('inventory', JSON.stringify(inventory));
 }
-
-function addProduct() {
-    const name = document.getElementById('productName').value;
-    const quantity = parseInt(document.getElementById('quantity').value);
-    const price = parseFloat(document.getElementById('price').value);
-    const dateAdded = new Date().toISOString().slice(0, 19).replace('T', ' ');
-
-    if (name && quantity > 0 && price >= 0) {
-        const product = { name, quantity, price, dateAdded };
-        inventory.push(product);
-        saveToLocalStorage();
-        renderTable();
-        clearInputs();
-        cancelAddProduct();
-    } else {
-        alert("Please fill all fields correctly.");
-    }
+ 
+function formatPrice(price) {
+    const formatted = price.toLocaleString('en-PH', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: price % 1 === 0 ? 0 : 2
+    });
+    return `₱${formatted}`;
 }
-
-function toggleAddProduct() {
-    const details = document.getElementById('addProductDetails');
-    details.style.display = details.style.display === 'none' ? 'block' : 'none';
-}
-
-function cancelAddProduct() {
-    document.getElementById('addProductDetails').style.display = 'none';
-    clearInputs();
-}
-
-function renderTable() {
+ 
+function renderTable(data = inventory) {
     const tableBody = document.querySelector('#inventoryTable tbody');
     tableBody.innerHTML = '';
-    inventory.forEach((product, index) => {
-        const row = `<tr>
+    data.forEach((product, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
             <td>${product.name}</td>
-            <td>${product.quantity}</td>
-            <td>₱${product.price.toFixed(2)}</td>
+            <td>${product.quantity.toLocaleString()}</td>
+            <td>${formatPrice(product.price)}</td>
             <td>${product.dateAdded}</td>
             <td>
-                <button class="edit-button" onclick="openEditProduct(${index})">Edit</button>
-                <button class="delete-button" onclick="deleteProduct(${index})">Delete</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="edit-button" onclick="event.stopPropagation(); openEditProduct(${index})">Edit</button>
+                    <button class="delete-button" onclick="event.stopPropagation(); deleteProduct(${index})">Delete</button>
+                </div>
             </td>
-        </tr>`;
-        tableBody.innerHTML += row;
+        `;
+        row.addEventListener('click', () => showProductDetails(index, row));
+        tableBody.appendChild(row);
     });
 }
-
+ 
 function deleteProduct(index) {
     inventory.splice(index, 1);
     saveToLocalStorage();
-    renderTable();
+    filterTable();
 }
-
+ 
+function showProductDetails(index, row) {
+    const existingDetails = row.nextElementSibling;
+    if (existingDetails && existingDetails.classList.contains('product-details-row')) {
+        existingDetails.remove();
+        return;
+    }
+ 
+    const product = inventory[index];
+    const detailsRow = document.createElement('tr');
+    detailsRow.classList.add('product-details-row');
+    const detailsCell = document.createElement('td');
+    detailsCell.colSpan = 5;
+    detailsCell.innerHTML = `
+        <div class="product-details">
+            <strong>Details:</strong><br>
+            ${product.productDetails || 'No additional details provided.'}
+        </div>
+    `;
+    detailsRow.appendChild(detailsCell);
+    row.parentNode.insertBefore(detailsRow, row.nextSibling);
+}
+ 
 function openEditProduct(index) {
     const product = inventory[index];
-    document.getElementById('editProductName').value = product.name;
-    document.getElementById('editQuantity').value = product.quantity;
-    document.getElementById('editPrice').value = product.price;
+    document.getElementById('productName').value = product.name;
+    document.getElementById('quantity').value = product.quantity;
+    document.getElementById('price').value = product.price;
+    document.getElementById('dateAdded').value = product.dateAdded;
+    document.getElementById('productDetails').value = product.productDetails;
+    document.getElementById('modalTitle').innerText = "Edit Product";
     editingIndex = index;
-    document.getElementById('editProductDetails').style.display = 'block';
+    toggleModal(true);
 }
-
-/*
-    PAG MAY GANITO SIT KINOPYA CODE NAMIN!
-    ~ARTILLAGAS & ARCEGA
-*/
-
-function updateProduct() {
-    const name = document.getElementById('editProductName').value;
-    const quantity = parseInt(document.getElementById('editQuantity').value);
-    const price = parseFloat(document.getElementById('editPrice').value);
-    const dateAdded = new Date().toISOString().slice(0, 19).replace('T', ' ');
-
+ 
+function toggleAddProduct() {
+    clearForm();
+    document.getElementById('modalTitle').innerText = "Add Product";
+    editingIndex = -1;
+    toggleModal(true);
+}
+ 
+function toggleModal(show = true) {
+    const modal = document.getElementById('productModal');
+    modal.style.display = show ? 'flex' : 'none';
+}
+ 
+function closeModal() {
+    toggleModal(false);
+    clearForm();
+}
+ 
+ 
+function submitProduct() {
+    const name = document.getElementById('productName').value;
+    const quantity = parseInt(document.getElementById('quantity').value);
+    const price = parseFloat(document.getElementById('price').value);
+    const dateAdded = document.getElementById('dateAdded').value;
+    const productDetails = document.getElementById('productDetails').value;
+ 
     if (name && quantity > 0 && price >= 0) {
-        inventory[editingIndex] = { name, quantity, price, dateAdded };
+        const product = { name, quantity, price, dateAdded, productDetails };
+        if (editingIndex >= 0) {
+            inventory[editingIndex] = product;
+        } else {
+            inventory.push(product);
+        }
         saveToLocalStorage();
-        renderTable();
-        clearEditInputs();
-        cancelEditProduct();
+        filterTable();
+        closeModal();
     } else {
         alert("Please fill all fields correctly.");
     }
 }
-
-function cancelEditProduct() {
-    document.getElementById('editProductDetails').style.display = 'none';
-    clearEditInputs();
-    editingIndex = -1;
-}
-
-function clearInputs() {
+ 
+function clearForm() {
     document.getElementById('productName').value = '';
     document.getElementById('quantity').value = '';
     document.getElementById('price').value = '';
+    document.getElementById('dateAdded').value = '';
+    document.getElementById('productDetails').value = '';
+    document.getElementById('modalTitle').innerText = "Add Product";
+    editingIndex = -1;
 }
-
-function clearEditInputs() {
-    document.getElementById('editProductName').value = '';
-    document.getElementById('editQuantity').value = '';
-    document.getElementById('editPrice').value = '';
-}
-
+ 
+document.getElementById('search').addEventListener('input', filterTable);
+document.getElementById('quantityFilterType').addEventListener('change', filterTable);
+document.getElementById('sortOrder').addEventListener('change', filterTable);
+ 
 function filterTable() {
-    const searchTerm = document.getElementById('search').value.toLowerCase();
-    const filteredInventory = inventory.filter(product => product.name.toLowerCase().includes(searchTerm));
-    renderFilteredTable(filteredInventory);
-}
-
-function filterByQuantity() {
-    const filterType = document.getElementById('quantityFilterType').value;
-    let filteredInventory = [...inventory];
-
-    if (filterType === 'least') {
-        filteredInventory.sort((a, b) => a.quantity - b.quantity);
-    } else if (filterType === 'most') {
-        filteredInventory.sort((a, b) => b.quantity - a.quantity);
+    let filtered = [...inventory];
+ 
+    const searchQuery = document.getElementById('search').value.toLowerCase();
+    const quantityFilterType = document.getElementById('quantityFilterType').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+ 
+    if (searchQuery) {
+        filtered = filtered.filter(product =>
+            product.name.toLowerCase().includes(searchQuery)
+        );
     }
-
-    renderFilteredTable(filteredInventory);
-}
-
-function renderFilteredTable(filteredInventory) {
-    const tableBody = document.querySelector('#inventoryTable tbody');
-    tableBody.innerHTML = '';
-    filteredInventory.forEach((product, index) => {
-        const row = `<tr>
-            <td>${product.name}</td>
-            <td>${product.quantity}</td>
-            <td>₱${product.price.toFixed(2)}</td>
-            <td>${product.dateAdded}</td>
-            <td class="actions">
-                <button class="edit-button" onclick="openEditProduct(${index})">Edit</button>
-                <button class="delete-button" onclick="deleteProduct(${index})">Delete</button>
-            </td>
-        </tr>`;
-        tableBody.innerHTML += row;
-    });
-}
-
-function sortTable() {
-    const order = document.getElementById('sortOrder').value;
-    if (order) {
-        inventory.sort((a, b) => {
-            const dateA = new Date(a.dateAdded);
-            const dateB = new Date(b.dateAdded);
-            return order === 'asc' ? dateA - dateB : dateB - dateA;
-        });
-        renderTable();
+ 
+    if (quantityFilterType === 'least') {
+        filtered.sort((a, b) => a.quantity - b.quantity);
+    } else if (quantityFilterType === 'most') {
+        filtered.sort((a, b) => b.quantity - a.quantity);
     }
+ 
+    if (sortOrder === 'asc') {
+        filtered.sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
+    } else if (sortOrder === 'desc') {
+        filtered.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+    }
+ 
+    renderTable(filtered);
 }
-
+ 
 renderTable();
